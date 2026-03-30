@@ -19,13 +19,17 @@ def wan_threshold(gray, window_size=3):
     pad = window_size // 2
     padded = np.pad(gray, ((pad, pad), (pad, pad)), mode="edge")
 
-    shifts = []
+    local_min = None
+    local_max = None
     for dy in range(window_size):
         for dx in range(window_size):
-            shifts.append(padded[dy : dy + gray.shape[0], dx : dx + gray.shape[1]])
-
-    local_min = np.minimum.reduce(shifts)
-    local_max = np.maximum.reduce(shifts)
+            view = padded[dy : dy + gray.shape[0], dx : dx + gray.shape[1]]
+            if local_min is None:
+                local_min = view.copy()
+                local_max = view.copy()
+            else:
+                local_min = np.minimum(local_min, view)
+                local_max = np.maximum(local_max, view)
     return 0.5 * (local_min + local_max)
 
 
@@ -58,18 +62,26 @@ def main():
         gray_path = src_dir / gray_name
         save_gray_bmp(gray_path, gray)
 
-        t = wan_threshold(gray, window_size=3)
-        binary = np.where(gray > t, 255, 0)
+        t3 = wan_threshold(gray, window_size=3)
+        binary3 = np.where(gray > t3, 255, 0)
 
-        bin_name = img_path.stem + "_binary_wan_w3.bmp"
-        bin_path = src_dir / bin_name
-        save_binary_bmp(bin_path, binary)
+        bin3_name = img_path.stem + "_binary_wan_w3.bmp"
+        bin3_path = src_dir / bin3_name
+        save_binary_bmp(bin3_path, binary3)
+
+        t25 = wan_threshold(gray, window_size=25)
+        binary25 = np.where(gray > t25, 255, 0)
+
+        bin25_name = img_path.stem + "_binary_wan_w25.bmp"
+        bin25_path = src_dir / bin25_name
+        save_binary_bmp(bin25_path, binary25)
 
         results.append(
             {
                 "source": img_path.name,
                 "gray": gray_name,
-                "binary": bin_name,
+                "binary_w3": bin3_name,
+                "binary_w25": bin25_name,
                 "size": img.size,
             }
         )
@@ -83,11 +95,11 @@ def build_report(results):
     lines.append("# Лабораторная работа №2\n")
     lines.append("## Обесцвечивание и бинаризация растровых изображений\n\n")
     lines.append("### Вариант 8: адаптивная бинаризация WAN\n")
-    lines.append("### Окно: 3x3\n\n")
+    lines.append("### Окна: 3x3, 25x25\n\n")
     lines.append("### Исходные данные\n")
     lines.append(f"- Количество изображений: {len(results)}\n")
     lines.append("- Метод: WAN (локальный порог по min/max)\n")
-    lines.append("- Размер окна: `3x3`\n")
+    lines.append("- Размеры окон: `3x3, 25x25`\n")
     lines.append("- Формат исходных изображений: PNG (`src/img*.png`)\n")
     lines.append("- Формат полутоновых и бинарных изображений: BMP\n\n")
     lines.append("### Формулы\n\n")
@@ -117,24 +129,24 @@ def build_report(results):
 
     for idx, item in enumerate(results, 1):
         lines.append(f"#### 2.{idx} Изображение {idx}\n\n")
-        lines.append("| Полутоновое | WAN 3x3 |\n")
-        lines.append("|:-----------:|:-------:|\n")
+        lines.append("| Полутоновое | WAN 3x3 | WAN 25x25 |\n")
+        lines.append("|:-----------:|:-------:|:---------:|\n")
         lines.append(
-            f"| ![gray](src/{item['gray']}) | ![wan](src/{item['binary']}) |\n\n"
+            f"| ![gray](src/{item['gray']}) | ![wan3](src/{item['binary_w3']}) | ![wan25](src/{item['binary_w25']}) |\n\n"
         )
 
     lines.append("### Результаты выполнения\n\n")
-    lines.append("| Изображение | Размер | Бинарный файл |\n")
-    lines.append("|:------------|-------:|:--------------|\n")
+    lines.append("| Изображение | Размер | Бинарные файлы |\n")
+    lines.append("|:------------|-------:|:---------------|\n")
     for idx, item in enumerate(results, 1):
         w, h = item["size"]
         lines.append(
-            f"| №{idx} ({item['source']}) | {w}x{h} | `{item['binary']}` |\n"
+            f"| №{idx} ({item['source']}) | {w}x{h} | `{item['binary_w3']}`, `{item['binary_w25']}` |\n"
         )
 
     lines.append("\n### Выводы\n\n")
     lines.append("1. Реализовано обесцвечивание RGB-изображений без библиотечных функций grayscale.\n")
-    lines.append("2. Для варианта 8 реализована адаптивная бинаризация WAN с окном 3x3 без библиотечных функций бинаризации.\n")
+    lines.append("2. Для варианта 8 реализована адаптивная бинаризация WAN с окнами 3x3 и 25x25 без библиотечных функций бинаризации.\n")
     lines.append("3. В отчете показаны результаты каждой операции (до и после) на нескольких изображениях.\n")
 
     return "".join(lines)
