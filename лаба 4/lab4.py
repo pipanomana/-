@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import cv2
@@ -6,19 +5,29 @@ import numpy as np
 
 
 def load_image(path):
-    img = cv2.imread(str(path), cv2.IMREAD_COLOR)
-    return img
+    # Keep original channel layout: grayscale stays 2D, color stays 3-channel.
+    return cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
 
 
-def to_grayscale(bgr):
-    b = bgr[:, :, 0].astype(np.float32)
-    g = bgr[:, :, 1].astype(np.float32)
-    r = bgr[:, :, 2].astype(np.float32)
-    gray = 0.299 * r + 0.587 * g + 0.114 * b
-    return gray
+def to_grayscale(image):
+    # If image is already grayscale, return float32 copy.
+    if image.ndim == 2:
+        return image.astype(np.float32)
+
+    # If image has alpha channel, drop it and keep BGR.
+    if image.shape[2] == 4:
+        image = image[:, :, :3]
+
+    # Manual grayscale conversion by assignment formula:
+    # I(x, y) = 0.299 * R + 0.587 * G + 0.114 * B
+    b = image[:, :, 0].astype(np.float32)
+    g = image[:, :, 1].astype(np.float32)
+    r = image[:, :, 2].astype(np.float32)
+    return 0.299 * r + 0.587 * g + 0.114 * b
 
 
 def prewitt_gradients(gray):
+    # Strictly requested Prewitt kernels.
     kx = np.array([[1, 0, -1],
                    [1, 0, -1],
                    [1, 0, -1]], dtype=np.float32)
@@ -26,8 +35,9 @@ def prewitt_gradients(gray):
                    [0, 0, 0],
                    [-1, -1, -1]], dtype=np.float32)
 
-    gx = cv2.filter2D(gray, ddepth=cv2.CV_32F, kernel=kx)
-    gy = cv2.filter2D(gray, ddepth=cv2.CV_32F, kernel=ky)
+    gx = cv2.filter2D(gray, ddepth=cv2.CV_32F, kernel=kx, borderType=cv2.BORDER_DEFAULT)
+    gy = cv2.filter2D(gray, ddepth=cv2.CV_32F, kernel=ky, borderType=cv2.BORDER_DEFAULT)
+    # Strictly requested gradient formula: G = |Gx| + |Gy|
     g = np.abs(gx) + np.abs(gy)
     return gx, gy, g
 
@@ -56,11 +66,11 @@ def main():
     out_dir = Path(__file__).resolve().parent / "results"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    img = load_image(input_path)
-    if img is None:
+    image = load_image(input_path)
+    if image is None:
         raise FileNotFoundError(f"Не удалось загрузить изображение: {input_path}")
 
-    gray = to_grayscale(img)
+    gray = to_grayscale(image)
     gx, gy, g = prewitt_gradients(gray)
 
     gx_norm = normalize_to_u8(gx)
@@ -69,8 +79,9 @@ def main():
     g_binary = binarize(g_norm, threshold)
 
     # Сохранение результатов
-    cv2.imwrite(str(out_dir / "source_color.png"), img)
-    cv2.imwrite(str(out_dir / "grayscale.bmp"), gray.round().astype(np.uint8))
+    # Keep source preview in color file slot. For grayscale input, OpenCV writes valid 8-bit image.
+    cv2.imwrite(str(out_dir / "source_color.png"), image)
+    cv2.imwrite(str(out_dir / "grayscale.bmp"), normalize_to_u8(gray))
     cv2.imwrite(str(out_dir / "gx_norm.bmp"), gx_norm)
     cv2.imwrite(str(out_dir / "gy_norm.bmp"), gy_norm)
     cv2.imwrite(str(out_dir / "g_norm.bmp"), g_norm)
